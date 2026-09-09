@@ -155,22 +155,75 @@ if pilihan_kelas != "-- Pilih Kelas --":
     else:
         st.info("Belum ada mahasiswa yang mengambil slot kelompok di kelas ini.")
 
-    # PANEL KONTROL PJ
+    # --- PANEL KONTROL KHUSUS PJ (LENGKAP EDIT STRUKTUR KELOMPOK) ---
     st.write("##")
     with st.expander("🔑 Panel Manajemen Kontrol PJ Kelas (Butuh PIN Auth)"):
         input_pin = st.text_input("Masukkan PIN Admin Kelas Ini:", type="password", key=f"pin_{pilihan_kelas}")
         if input_pin == detail_kelas["pin_admin"]:
-            st.success("🔓 Hak Akses PJ Terverifikasi!")
+            st.success("🔓 Hak Akses PJ Terverifikasi! Anda diizinkan mengubah pengaturan.")
             
             edit_desk = st.text_area("Ubah Deskripsi Petunjuk:", value=detail_kelas["deskripsi"])
             toggle_kunci = st.toggle("🔒 Kunci Akses Pengisian Mahasiswa", value=detail_kelas.get("dikunci", False))
             
-            if st.button("💾 Simpan Perubahan Setelan Kelas"):
-                supabase.table("master_kelas").update({"deskripsi": edit_desk, "dikunci": toggle_kunci}).eq("nama_kelas", pilihan_kelas).execute()
-                st.success("Setelan kelas diperbarui!")
+            # FITUR BARU: Edit Jumlah Kelompok dan Kapasitas
+            col_e1, col_e2 = st.columns(2)
+            with col_e1:
+                edit_j_kel = st.number_input(
+                    "Ubah Jumlah Kelompok:", 
+                    min_value=1, 
+                    max_value=40, 
+                    value=int(detail_kelas.get("jumlah_kelompok", len(list_kelompok)))
+                )
+            with col_e2:
+                edit_kap = st.number_input(
+                    "Ubah Kapasitas per Kelompok:", 
+                    min_value=1, 
+                    max_value=100, 
+                    value=int(detail_kelas.get("kapasitas_per_kelompok", 4))
+                )
+            
+            if st.button("💾 Simpan Perubahan Setelan Kelas", type="primary"):
+                # 1. Update data master kelas
+                supabase.table("master_kelas").update({
+                    "deskripsi": edit_desk,
+                    "dikunci": toggle_kunci,
+                    "jumlah_kelompok": int(edit_j_kel),
+                    "kapasitas_per_kelompok": int(edit_kap)
+                }).eq("nama_kelas", pilihan_kelas).execute()
+                
+                # 2. Update kapasitas seluruh kelompok yang ada
+                supabase.table("data_kelompok").update({
+                    "kapasitas": int(edit_kap)
+                }).eq("nama_kelas", pilihan_kelas).execute()
+                
+                # 3. Penyesuaian Penambahan / Pengurangan Jumlah Kelompok
+                current_count = len(list_kelompok)
+                new_count = int(edit_j_kel)
+                
+                if new_count > current_count:
+                    # Buat kelompok tambahan
+                    new_groups = [
+                        {
+                            "nama_kelas": pilihan_kelas,
+                            "nama_kelompok": f"Kelompok {i}",
+                            "kapasitas": int(edit_kap)
+                        }
+                        for i in range(current_count + 1, new_count + 1)
+                    ]
+                    supabase.table("data_kelompok").insert(new_groups).execute()
+                
+                elif new_count < current_count:
+                    # Hapus kelompok ekstra dari urutan terbesar
+                    groups_to_remove = [f"Kelompok {i}" for i in range(new_count + 1, current_count + 1)]
+                    for g_name in groups_to_remove:
+                        supabase.table("anggota_kelas").delete().eq("nama_kelas", pilihan_kelas).eq("nama_kelompok", g_name).execute()
+                        supabase.table("data_kelompok").delete().eq("nama_kelas", pilihan_kelas).eq("nama_kelompok", g_name).execute()
+                
+                st.success("Setelan kelas & struktur kelompok berhasil diperbarui!")
                 st.rerun()
                 
             st.divider()
+            st.write("**⚠️ Menu Bahaya Kontrol Sesi:**")
             if st.button("🔴 RESET & HAPUS TOTAL RUANG KELAS INI"):
                 supabase.table("master_kelas").delete().eq("nama_kelas", pilihan_kelas).execute()
                 st.success("Ruang kelas sukses dihapus!")

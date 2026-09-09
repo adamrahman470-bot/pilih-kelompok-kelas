@@ -28,6 +28,11 @@ st.markdown("""
         box-shadow: 0 4px 10px rgba(30, 58, 138, 0.25);
         margin-top: 8px;
     }
+    
+    /* Styling khusus chip/tombol pilihan kelas modern */
+    div[data-testid="stRadio"] > div {
+        gap: 8px;
+    }
     </style>""", unsafe_allow_html=True)
 
 # 2. KONEKSI DATABASE SUPABASE SECARA AMAN
@@ -66,23 +71,42 @@ st.markdown("<p style='text-align: center; color: #9CA3AF; margin-bottom: 0px;'>
 
 st.markdown("""
     <div style='text-align: center; margin-bottom: 25px;'>
-        <span class='dev-badge'>⚡ Designed & Developed by <b>Adam Rahman D.A. S.T.</b></span>
+        <span class='dev-badge'>⚡ Designed & Developed by <b>Adam Rahman D.A. 👍</b></span>
     </div>
 """, unsafe_allow_html=True)
 
 st.divider()
 
-# --- PILIHAN & PENCARIAN RUANG KELAS (SINGLE ELEGAN INPUT) ---
+# --- FITUR PENCARIAN MODERN & MOBILE-NATIVE SEARCH ---
 list_kelas = ambil_semua_kelas()
 
-# Menggunakan 1 Selectbox Tunggal yang langsung bisa di-search
-pilihan_kelas = st.selectbox(
-    "🔍 Cari / Pilih Ruang Kelas atau Mata Kuliah Anda:",
-    options=list_kelas,
-    index=None,
-    placeholder="Ketik atau pilih nama kelas Anda...",
-    help="Ketuk kolom ini dan ketik nama kelas/matkul Anda untuk mencari secara instan."
-)
+st.write("### 🔍 Cari & Pilih Ruang Kelas Anda")
+
+# Kolom pencarian native yang DIJAMIN 100% memicu Keyboard HP saat diketuk
+query_cari = st.text_input(
+    "Ketik nama kelas / mata kuliah:",
+    placeholder="🔎 Ketuk di sini untuk mengetik nama kelas...",
+    label_visibility="collapsed"
+).strip()
+
+# Menyaring opsi kelas secara instant
+if query_cari:
+    filtered_kelas = [k for k in list_kelas if query_cari.lower() in k.lower()]
+else:
+    filtered_kelas = list_kelas
+
+pilihan_kelas = None
+
+if filtered_kelas:
+    # Menggunakan radio bergaya kapsul/button sentuh modern
+    pilihan_kelas = st.radio(
+        "Pilih kelas yang ditemukan:",
+        options=filtered_kelas,
+        index=0 if query_cari else None, # Jika pengguna mengetik, otomatis memilih hasil paling atas!
+        key="selected_class_radio"
+    )
+else:
+    st.warning("⚠️ Tidak ada kelas yang cocok dengan kata kunci tersebut.")
 
 # --- ALUR UTAMA JIKA KELAS DIPILIH ---
 if pilihan_kelas:

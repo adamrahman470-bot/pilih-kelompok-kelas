@@ -15,7 +15,6 @@ st.markdown("""
     .status-tersedia { color: #16A34A; font-weight: bold; background-color: #DCFCE7; padding: 2px 8px; border-radius: 4px; }
     .card-kelompok { background-color: #FFFFFF; border: 1px solid #E5E7EB; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
     
-    /* Style Kustom Badge Pengembang */
     .dev-badge {
         display: inline-block;
         background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%);
@@ -53,7 +52,8 @@ def ambil_detail_kelas(nama_kelas):
     return res.data[0] if res.data else None
 
 def ambil_kelompok_kelas(nama_kelas):
-    res = supabase.table("data_kelompok").select("*").eq("nama_kelas", nama_kelas).order("kelompok_id").execute()
+    # Diurutkan berdasarkan kelompok_id secara ascending agar selalu urut
+    res = supabase.table("data_kelompok").select("*").eq("nama_kelas", nama_kelas).order("kelompok_id", desc=False).execute()
     return res.data
 
 def ambil_anggota_kelas(nama_kelas):
@@ -64,7 +64,6 @@ def ambil_anggota_kelas(nama_kelas):
 st.title("👥 Sistem Pemilihan Kelompok Kelas Universal")
 st.markdown("<p style='text-align: center; color: #9CA3AF; margin-bottom: 0px;'>Sistem pembagian slot kelompok terintegrasi cloud, anti-bentrok, dan real-time untuk seluruh program studi.</p>", unsafe_allow_html=True)
 
-# TAMPILAN ELEGAN IDENTITAS PENGEMBANG
 st.markdown("""
     <div style='text-align: center; margin-bottom: 25px;'>
         <span class='dev-badge'>⚡ Designed & Developed by <b>Adam Rahman D.A</b></span>
@@ -111,48 +110,52 @@ if pilihan_kelas != "-- Pilih Kelas --":
             else:
                 st.sidebar.info("🟢 Identitas aman. Silakan klik tombol 'Ambil Slot' pada kelompok pilihan Anda.")
 
-    # PAPAN KETERSAAN SLOT
+    # PAPAN KETERSAAN SLOT (PERBAIKAN RESPONSIF SELULER & LAPTOP)
     st.write("### 📋 Papan Ketersediaan Slot Kelompok")
-    cols = st.columns(3)
     
-    for idx, kel in enumerate(list_kelompok):
-        col = cols[idx % 3]
-        m_terdaftar = df_anggota[df_anggota["nama_kelompok"] == kel["nama_kelompok"]]
-        terisi = len(m_terdaftar)
-        kapasitas = kel["kapasitas"]
+    # Membagi kelompok menjadi chunk berisi 3 item per baris
+    num_columns = 3
+    for i in range(0, len(list_kelompok), num_columns):
+        batch = list_kelompok[i:i + num_columns]
+        cols = st.columns(num_columns)
         
-        with col:
-            st.markdown(f"""
-            <div class='card-kelompok'>
-                <h3 style='margin-bottom:5px; color:#1E3A8A;'>👥 {kel['nama_kelompok']}</h3>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.progress(min(terisi / kapasitas, 1.0))
-            if terisi >= kapasitas:
-                st.markdown(f"Status: <span class='status-penuh'>{terisi} / {kapasitas} (Penuh)</span>", unsafe_allow_html=True)
-            else:
-                st.markdown(f"Status: <span class='status-tersedia'>{terisi} / {kapasitas} Tersedia</span>", unsafe_allow_html=True)
-            
-            st.write("")
-            for i in range(kapasitas):
-                if i < terisi:
-                    row_mhs = m_terdaftar.iloc[i]
-                    st.error(f"🔴 **Slot {i+1}:** {row_mhs['nama_mahasiswa']} ({row_mhs['npm_mahasiswa']})")
+        for idx, kel in enumerate(batch):
+            with cols[idx]:
+                m_terdaftar = df_anggota[df_anggota["nama_kelompok"] == kel["nama_kelompok"]]
+                terisi = len(m_terdaftar)
+                kapasitas = kel["kapasitas"]
+                
+                st.markdown(f"""
+                <div class='card-kelompok'>
+                    <h3 style='margin-bottom:5px; color:#1E3A8A;'>👥 {kel['nama_kelompok']}</h3>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.progress(min(terisi / kapasitas, 1.0))
+                if terisi >= kapasitas:
+                    st.markdown(f"Status: <span class='status-penuh'>{terisi} / {kapasitas} (Penuh)</span>", unsafe_allow_html=True)
                 else:
-                    st.success(f"🟢 **Slot {i+1}:** [ KOSONG ]")
-            
-            if not detail_kelas.get("dikunci", False) and input_nama and input_npm and not sudah_daftar:
-                if terisi < kapasitas:
-                    if st.button(f"Ambil Slot {kel['nama_kelompok']}", key=f"join_{kel['kelompok_id']}", type="primary"):
-                        supabase.table("anggota_kelas").insert({
-                            "nama_kelas": pilihan_kelas,
-                            "nama_mahasiswa": input_nama,
-                            "npm_mahasiswa": input_npm,
-                            "nama_kelompok": kel["nama_kelompok"]
-                        }).execute()
-                        st.rerun()
-            st.write("---")
+                    st.markdown(f"Status: <span class='status-tersedia'>{terisi} / {kapasitas} Tersedia</span>", unsafe_allow_html=True)
+                
+                st.write("")
+                for slot_idx in range(kapasitas):
+                    if slot_idx < terisi:
+                        row_mhs = m_terdaftar.iloc[slot_idx]
+                        st.error(f"🔴 **Slot {slot_idx+1}:** {row_mhs['nama_mahasiswa']} ({row_mhs['npm_mahasiswa']})")
+                    else:
+                        st.success(f"🟢 **Slot {slot_idx+1}:** [ KOSONG ]")
+                
+                if not detail_kelas.get("dikunci", False) and input_nama and input_npm and not sudah_daftar:
+                    if terisi < kapasitas:
+                        if st.button(f"Ambil Slot {kel['nama_kelompok']}", key=f"join_{kel['kelompok_id']}", type="primary"):
+                            supabase.table("anggota_kelas").insert({
+                                "nama_kelas": pilihan_kelas,
+                                "nama_mahasiswa": input_nama,
+                                "npm_mahasiswa": input_npm,
+                                "nama_kelompok": kel["nama_kelompok"]
+                            }).execute()
+                            st.rerun()
+                st.write("---")
 
     # DOWNLOAD REKAP EXCEL
     st.write("### 📥 Unduh Berkas Rekap Kelas")

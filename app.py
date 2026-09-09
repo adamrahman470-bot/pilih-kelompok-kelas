@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 import io
+import time
 
 # 1. KONFIGURASI DAN STYLING PREMIUM
 st.set_page_config(page_title="Sistem Kelompok Kelas Real-Time", layout="wide", page_icon="👥")
@@ -52,7 +53,6 @@ def ambil_detail_kelas(nama_kelas):
     return res.data[0] if res.data else None
 
 def ambil_kelompok_kelas(nama_kelas):
-    # Diurutkan berdasarkan kelompok_id secara ascending agar selalu urut
     res = supabase.table("data_kelompok").select("*").eq("nama_kelas", nama_kelas).order("kelompok_id", desc=False).execute()
     return res.data
 
@@ -72,14 +72,19 @@ st.markdown("""
 
 st.divider()
 
-# PILIHAN RUANG KELAS UTAMA
+# PILIHAN & PENCARIAN RUANG KELAS (SEARCHABLE DROPDOWN)
 list_kelas = ambil_semua_kelas()
 col_header1, col_header2 = st.columns([2, 1])
 with col_header1:
-    pilihan_kelas = st.selectbox("📖 Pilih Ruang Kelas / Mata Kuliah Anda:", ["-- Pilih Kelas --"] + list_kelas)
+    pilihan_kelas = st.selectbox(
+        "🔍 Cari / Pilih Ruang Kelas atau Mata Kuliah Anda:",
+        options=["-- Ketik nama kelas / Pilih dari daftar --"] + list_kelas,
+        index=0,
+        help="Anda dapat mengetik langsung nama mata kuliah/kelas pada kolom ini untuk mencari secara instan."
+    )
 
 # --- ALUR UTAMA JIKA KELAS DIPILIH ---
-if pilihan_kelas != "-- Pilih Kelas --":
+if pilihan_kelas != "-- Ketik nama kelas / Pilih dari daftar --":
     detail_kelas = ambil_detail_kelas(pilihan_kelas)
     list_kelompok = ambil_kelompok_kelas(pilihan_kelas)
     df_anggota = ambil_anggota_kelas(pilihan_kelas)
@@ -110,10 +115,9 @@ if pilihan_kelas != "-- Pilih Kelas --":
             else:
                 st.sidebar.info("🟢 Identitas aman. Silakan klik tombol 'Ambil Slot' pada kelompok pilihan Anda.")
 
-    # PAPAN KETERSAAN SLOT (PERBAIKAN RESPONSIF SELULER & LAPTOP)
+    # PAPAN KETERSAAN SLOT (RESPONSIF PONSEL & LAPTOP)
     st.write("### 📋 Papan Ketersediaan Slot Kelompok")
     
-    # Membagi kelompok menjadi chunk berisi 3 item per baris
     num_columns = 3
     for i in range(0, len(list_kelompok), num_columns):
         batch = list_kelompok[i:i + num_columns]
@@ -250,7 +254,7 @@ if pilihan_kelas != "-- Pilih Kelas --":
         elif input_pin != "":
             st.error("PIN Salah!")
 
-# --- PEMBUATAN RUANG KELAS BARU ---
+# --- PEMBUATAN RUANG KELAS BARU DEGAN INTERAKSI DAN ANIMASI SUKSES ---
 st.divider()
 with st.expander("➕ PJ Baru? Klik di Sini untuk Membuat Ruang Pembagian Kelompok Baru"):
     st.write("Buat ruang pendaftaran terpisah khusus untuk kelas atau mata kuliah Anda sendiri:")
@@ -268,32 +272,36 @@ with st.expander("➕ PJ Baru? Klik di Sini untuk Membuat Ruang Pembagian Kelomp
     if st.button("🚀 Buat dan Aktifkan Ruang Kelas", type="primary"):
         if new_nama_kelas and new_pin:
             try:
-                supabase.table("master_kelas").insert({
-                    "nama_kelas": new_nama_kelas,
-                    "deskripsi": new_deskripsi,
-                    "pin_admin": new_pin,
-                    "jumlah_kelompok": int(new_j_kel),
-                    "kapasitas_per_kelompok": int(new_kap),
-                    "dikunci": False
-                }).execute()
-                
-                data_kelompok_batch = [
-                    {
+                with st.spinner("Memproses & mendaftarkan ruang kelas baru..."):
+                    supabase.table("master_kelas").insert({
                         "nama_kelas": new_nama_kelas,
-                        "nama_kelompok": f"Kelompok {num}",
-                        "kapasitas": int(new_kap)
-                    }
-                    for num in range(1, int(new_j_kel) + 1)
-                ]
-                supabase.table("data_kelompok").insert(data_kelompok_batch).execute()
+                        "deskripsi": new_deskripsi,
+                        "pin_admin": new_pin,
+                        "jumlah_kelompok": int(new_j_kel),
+                        "kapasitas_per_kelompok": int(new_kap),
+                        "dikunci": False
+                    }).execute()
+                    
+                    data_kelompok_batch = [
+                        {
+                            "nama_kelas": new_nama_kelas,
+                            "nama_kelompok": f"Kelompok {num}",
+                            "kapasitas": int(new_kap)
+                        }
+                        for num in range(1, int(new_j_kel) + 1)
+                    ]
+                    supabase.table("data_kelompok").insert(data_kelompok_batch).execute()
                 
-                st.success(f"Berhasil membuat ruang kelas '{new_nama_kelas}'!")
+                # ANIMASI & BALASAN VISUAL SUKSES
+                st.balloons()
+                st.success(f"🎉 **BERHASIL!** Ruang kelas '{new_nama_kelas}' telah aktif dan siap digunakan.")
+                time.sleep(1.8) # Jeda singkat agar pengguna dapat menikmati animasi sukses
                 st.rerun()
             except Exception as e:
                 err_msg = str(e)
                 if "duplicate" in err_msg.lower() or "unique" in err_msg.lower():
-                    st.error("Nama kelas sudah terdaftar! Gunakan nama yang lebih spesifik.")
+                    st.error("⚠️ Nama kelas sudah terdaftar! Gunakan nama yang lebih spesifik.")
                 else:
                     st.error(f"Gagal menyimpan ke database: {err_msg}")
         else:
-            st.error("Nama Kelas dan PIN Admin wajib diisi!")
+            st.error("⚠️ Nama Kelas dan PIN Admin wajib diisi!")

@@ -72,19 +72,32 @@ st.markdown("""
 
 st.divider()
 
-# PILIHAN & PENCARIAN RUANG KELAS (SEARCHABLE DROPDOWN)
-list_kelas = ambil_semua_kelas()
-col_header1, col_header2 = st.columns([2, 1])
-with col_header1:
-    pilihan_kelas = st.selectbox(
-        "🔍 Cari / Pilih Ruang Kelas atau Mata Kuliah Anda:",
-        options=["-- Ketik nama kelas / Pilih dari daftar --"] + list_kelas,
-        index=0,
-        help="Anda dapat mengetik langsung nama mata kuliah/kelas pada kolom ini untuk mencari secara instan."
-    )
+# FITUR PENCARIAN & PEMILIHAN KELAS UNTUK PONSEL & LAPTOP
+list_kelas_semua = ambil_semua_kelas()
+
+col_search1, col_search2 = st.columns([1, 1])
+
+with col_search1:
+    search_keyword = st.text_input("🔍 Cari Nama Kelas / Matkul:", placeholder="Ketik di sini (keyboard HP otomatis muncul)...").strip()
+
+# Filter daftar kelas berdasarkan keyword pencarian
+if search_keyword:
+    list_kelas_filtered = [k for k in list_kelas_semua if search_keyword.lower() in k.lower()]
+else:
+    list_kelas_filtered = list_kelas_semua
+
+with col_search2:
+    if len(list_kelas_filtered) > 0:
+        pilihan_kelas = st.selectbox(
+            f"📋 Pilih Hasil Kelas ({len(list_kelas_filtered)} ditemukan):",
+            options=["-- Pilih Kelas --"] + list_kelas_filtered
+        )
+    else:
+        st.warning("⚠️ Kelas tidak ditemukan. Periksa kata kunci pencarian Anda.")
+        pilihan_kelas = "-- Pilih Kelas --"
 
 # --- ALUR UTAMA JIKA KELAS DIPILIH ---
-if pilihan_kelas != "-- Ketik nama kelas / Pilih dari daftar --":
+if pilihan_kelas != "-- Pilih Kelas --":
     detail_kelas = ambil_detail_kelas(pilihan_kelas)
     list_kelompok = ambil_kelompok_kelas(pilihan_kelas)
     df_anggota = ambil_anggota_kelas(pilihan_kelas)
@@ -295,7 +308,7 @@ with st.expander("➕ PJ Baru? Klik di Sini untuk Membuat Ruang Pembagian Kelomp
                 # ANIMASI & BALASAN VISUAL SUKSES
                 st.balloons()
                 st.success(f"🎉 **BERHASIL!** Ruang kelas '{new_nama_kelas}' telah aktif dan siap digunakan.")
-                time.sleep(1.8) # Jeda singkat agar pengguna dapat menikmati animasi sukses
+                time.sleep(1.8)
                 st.rerun()
             except Exception as e:
                 err_msg = str(e)

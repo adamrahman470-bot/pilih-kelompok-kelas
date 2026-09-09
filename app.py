@@ -1,81 +1,197 @@
-import streamlit as st
+import io
 import pandas as pd
-import time
+import streamlit as st
 
-# 1. Konfigurasi Halaman Utama
-st.set_page_config(page_title="Sistem Pemilihan Kelompok Kelas", layout="wide", page_icon="👥")
+# 1. KONFIGURASI HALAMAN UTAMA & TEMA KUSTOM
+st.set_page_config(
+    page_title="Sistem Pemilihan Kelompok Kelas Universal",
+    layout="wide",
+    page_icon="👥",
+)
 
-# 2. Inisialisasi State / Database Lokal dalam Sesi
+# Styling CSS untuk UI Premium & Modern
+st.markdown(
+    """
+    <style>
+    .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
+    h1 { color: #1E3A8A; font-weight: 800; }
+    .stButton>button { width: 100%; border-radius: 6px; font-weight: 600; }
+    .status-penuh { color: #DC2626; font-weight: bold; background-color: #FEE2E2; padding: 2px 8px; border-radius: 4px; }
+    .status-tersedia { color: #16A34A; font-weight: bold; background-color: #DCFCE7; padding: 2px 8px; border-radius: 4px; }
+    .box-sesi { background-color: #F3F4F6; padding: 15px; border-radius: 8px; border-left: 5px solid #2563EB; }
+    </style>""",
+    unsafe_allow_html=True,
+)
+
+# 2. INISIALISASI STATE UTAMA
+if "sesi_aktif" not in st.session_state:
+    st.session_state.sesi_aktif = False
+
 if "config" not in st.session_state:
-    st.session_state.config = {
-        "judul": "Pembagian Kelompok Mata Kuliah",
-        "deskripsi": "Pilih slot kelompokmu yang masih tersedia. Ingat, satu mahasiswa hanya bisa memilih 1 slot!",
-        "pass_admin": "admin123",
-        "dikunci": False
-    }
+    st.session_state.config = {}
 
 if "kelompok_list" not in st.session_state:
-    # Default 5 kelompok, kapasitas 4 orang
-    st.session_state.kelompok_list = [
-        {"id": i, "nama": f"Kelompok {i}", "kapasitas": 4} for i in range(1, 6)
-    ]
+    st.session_state.kelompok_list = []
 
 if "data_anggota" not in st.session_state:
-    st.session_state.data_anggota = pd.DataFrame(columns=["NIM_Nama", "Kelompok_ID"])
+    st.session_state.data_anggota = pd.DataFrame(
+        columns=["Nama", "NPM", "Kelompok_ID", "Nama_Kelompok"]
+    )
 
-# Shortcut variabel
+# --- SIDEBAR UTAMA: FORM INPUT MAHASISWA & PANEL ADMIN ---
+st.sidebar.header("👤 Menu Pendaftaran")
+
+# JIKA BELUM ADA SESI YANG DIBUAT OLEH PJ
+if not st.session_state.sesi_aktif:
+    st.title("👥 Sistem Pemilihan Kelompok Kelas Real-Time")
+    st.info("💡 Belum ada sesi pembagian kelompok yang aktif saat ini.")
+
+    st.markdown("""
+    ### 📢 Petunjuk untuk Penanggung Jawab (PJ):
+    Silakan masuk ke **Panel Kontrol PJ / Admin** di sidebar sebelah kiri untuk membuat sesi pembagian kelompok baru khusus untuk mata kuliah Anda.
+    """)
+
+    # Form Pembuatan Sesi Baru untuk PJ Siapapun
+    with st.sidebar.expander(
+        "➕ Buat Sesi Pembagian Kelompok Baru", expanded=True
+    ):
+        st.write(
+            "Isi formulir di bawah ini untuk menginisiasi ruang pendaftaran"
+            " kelompok baru:"
+        )
+        buat_judul = st.text_input(
+            "Nama Mata Kuliah / Kegiatan:",
+            placeholder="Contoh: Pemrograman Web Kelas A",
+        )
+        buat_deskripsi = st.text_area(
+            "Deskripsi / Petunjuk Tugas:",
+            value=(
+                "Pilih slot kelompokmu yang masih tersedia. Ingat, satu"
+                " mahasiswa hanya bisa memilih 1 slot!"
+            ),
+        )
+
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            buat_jumlah_kel = st.number_input(
+                "Jumlah Kelompok Awal:", min_value=1, max_value=50, value=5
+            )
+        with col_s2:
+            buat_kapasitas = st.number_input(
+                "Kapasitas per Kelompok:", min_value=1, max_value=100, value=4
+            )
+
+        buat_pin = st.text_input(
+            "Buat PIN / Password Admin Anda:",
+            type="password",
+            help=(
+                "PIN ini digunakan hanya oleh Anda untuk mengatur sesi ini."
+            ),
+        )
+
+        if st.button("🚀 Aktifkan Sesi Kelompok Sekarang", type="primary"):
+            if buat_judul and buat_pin:
+                # Daftarkan konfigurasi mandiri milik PJ tersebut
+                st.session_state.config = {
+                    "judul": buat_judul,
+                    "deskripsi": buat_deskripsi,
+                    "pass_admin": buat_pin,
+                    "dikunci": False,
+                }
+                # Generate kelompok default pesanan PJ
+                st.session_state.kelompok_list = [
+                    {
+                        "id": i,
+                        "nama": f"Kelompok {i}",
+                        "kapasitas": int(buat_kapasitas),
+                    }
+                    for i in range(1, int(buat_jumlah_kel) + 1)
+                ]
+                # Reset kontainer data anggota agar bersih dari sisa sesi kelas lain
+                st.session_state.data_anggota = pd.DataFrame(
+                    columns=["Nama", "NPM", "Kelompok_ID", "Nama_Kelompok"]
+                )
+                st.session_state.sesi_aktif = True
+                st.success("Sesi berhasil dibuat! Halaman otomatis memuat data.")
+                st.rerun()
+            else:
+                st.error("Nama Mata Kuliah dan PIN Admin wajib diisi!")
+    st.stop()
+
+# JIKA SESI SUDAH AKTIF (ALUR MAHASISWA & MANAJEMEN PJ)
 cfg = st.session_state.config
-df_anggota = st.session_state.data_anggota
 
-# --- HEADER UTAMA ---
+# --- TAMPILAN HEADER UTAMA DARI CONFIG PJ ---
 st.title(f"📌 {cfg['judul']}")
 st.markdown(f"*{cfg['deskripsi']}*")
 st.divider()
 
-# --- SIDEBAR: AKSES PENDAFTARAN MAHASISWA & PANEL ADMIN ---
-st.sidebar.header("👤 Input Data Mahasiswa")
-
+# Logika Input Mahasiswa (Hanya tampil jika pendaftaran belum dikunci oleh PJ)
 if cfg["dikunci"]:
     st.sidebar.error("🔒 Pemilihan kelompok telah DIKUNCI oleh PJ/Admin.")
-    input_identitas = ""
+    input_nama = ""
+    input_npm = ""
 else:
-    input_identitas = st.sidebar.text_input("Masukkan Nama / NIM Anda:").strip()
+    input_nama = st.sidebar.text_input("Masukkan Nama:").strip()
+    input_npm = st.sidebar.text_input("Masukkan NPM:").strip()
 
-    if input_identitas:
-        # Cek apakah nama/NIM sudah terdaftar
-        sudah_daftar = df_anggota[df_anggota["NIM_Nama"].str.lower() == input_identitas.lower()]
+    df_aktif = st.session_state.data_anggota
+    sudah_daftar_nama = (
+        not df_aktif[df_aktif["Nama"].str.lower() == input_nama.lower()].empty
+        if input_nama
+        else False
+    )
+    sudah_daftar_npm = (
+        not df_aktif[df_aktif["NPM"] == input_npm].empty
+        if input_npm
+        else False
+    )
 
-        if not sudah_daftar.empty:
-            kel_id_user = sudah_daftar.iloc[0]["Kelompok_ID"]
-            nama_kel_user = next((k["nama"] for k in st.session_state.kelompok_list if k["id"] == kel_id_user), "Kelompok")
-            st.sidebar.warning(f"Anda sudah terdaftar di **{nama_kel_user}**.")
-            
-            # Tombol Batal Slot Sendiri
-            if st.sidebar.button("❌ Batalkan Slot Saya"):
-                st.session_state.data_anggota = df_anggota[df_anggota["NIM_Nama"].str.lower() != input_identitas.lower()]
+    if input_nama or input_npm:
+        if sudah_daftar_nama or sudah_daftar_npm:
+            user_row = df_aktif[
+                (df_aktif["Nama"].str.lower() == input_nama.lower())
+                | (df_aktif["NPM"] == input_npm)
+            ].iloc[0]
+            st.sidebar.warning(
+                f"Identitas ini sudah terdaftar di **{user_row['Nama_Kelompok']}**."
+            )
+
+            if st.sidebar.button("❌ Batalkan Slot Saya", type="secondary"):
+                st.session_state.data_anggota = df_aktif[
+                    (df_aktif["Nama"].str.lower() != input_nama.lower())
+                    & (df_aktif["NPM"] != input_npm)
+                ]
                 st.sidebar.success("Slot berhasil dibatalkan!")
                 st.rerun()
         else:
-            st.sidebar.info("Status: Belum memilih kelompok.")
+            st.sidebar.info(
+                "💡 Identitas aman. Silakan klik tombol 'Pilih Kelompok' pada"
+                " papan utama di sebelah kanan."
+            )
 
 st.sidebar.divider()
 
-# --- PANEL PJ / ADMIN (UNIVERSAL) ---
+# --- PANEL KONTROL KHUSUS PJ / ADMIN YANG MEMILIKI PIN ---
 with st.sidebar.expander("🔑 Panel Kontrol PJ / Admin"):
-    pass_input = st.text_input("Password Admin:", type="password")
-    
+    pass_input = st.text_input("Masukkan PIN Admin Sesi Ini:", type="password")
+
     if pass_input == cfg["pass_admin"]:
-        st.success("Akses Admin Diterima")
-        
-        # Edit Judul & Deskripsi
-        new_judul = st.text_input("Judul Mata Kuliah / Kegiatan:", value=cfg["judul"])
-        new_desk = st.text_area("Deskripsi / Petunjuk:", value=cfg["deskripsi"])
-        new_pass = st.text_input("Ganti Password Admin:", value=cfg["pass_admin"])
-        
-        # Sakelar Kunci Pilihan
-        is_lock = st.toggle("🔒 Kunci Semua Pilihan", value=cfg["dikunci"])
-        
-        if st.button("Simpan Pengaturan Header"):
+        st.success("🔓 Mode Kontrol PJ Aktif")
+
+        # PJ mengubah teks judulan dan petunjuk mandiri
+        new_judul = st.text_input("Ubah Judul Mata Kuliah:", value=cfg["judul"])
+        new_desk = st.text_area(
+            "Ubah Deskripsi / Petunjuk:", value=cfg["deskripsi"]
+        )
+        new_pass = st.text_input(
+            "Ubah PIN Admin Sesi Ini:", value=cfg["pass_admin"]
+        )
+        is_lock = st.toggle(
+            "🔒 Kunci Semua Pilihan (Lock All)", value=cfg["dikunci"]
+        )
+
+        if st.button("💾 Simpan Perubahan Setelan", type="primary"):
             st.session_state.config["judul"] = new_judul
             st.session_state.config["deskripsi"] = new_desk
             st.session_state.config["pass_admin"] = new_pass
@@ -83,92 +199,188 @@ with st.sidebar.expander("🔑 Panel Kontrol PJ / Admin"):
             st.rerun()
 
         st.divider()
-        st.write("**Atur Kelompok:**")
-        
-        # Tambah / Hapus Kelompok
+        st.write("**⚙️ Manajemen Jumlah Kelompok:**")
+
         col_adm1, col_adm2 = st.columns(2)
         with col_adm1:
-            if st.button("➕ Kelompok"):
+            if st.button("➕ Tambah Kelompok"):
                 new_id = len(st.session_state.kelompok_list) + 1
-                st.session_state.kelompok_list.append({"id": new_id, "nama": f"Kelompok {new_id}", "kapasitas": 4})
+                st.session_state.kelompok_list.append(
+                    {
+                        "id": new_id,
+                        "nama": f"Kelompok {new_id}",
+                        "kapasitas": 4,
+                    }
+                )
                 st.rerun()
         with col_adm2:
-            if st.button("➖ Kelompok") and len(st.session_state.kelompok_list) > 1:
+            if (
+                st.button("➖ Kurang Kelompok")
+                and len(st.session_state.kelompok_list) > 1
+            ):
                 st.session_state.kelompok_list.pop()
                 st.rerun()
 
-        # Edit Nama & Kapasitas per Kelompok
+        # Kustomisasi Nama Kelompok & Batas Kapasitas per Kelompok secara dinamis oleh PJ
+        st.write("**📝 Detail Kustomisasi Kelompok:**")
         for k in st.session_state.kelompok_list:
-            st.caption(f"Setting {k['nama']}")
-            k["nama"] = st.text_input(f"Nama Kelompok (ID {k['id']}):", value=k["nama"], key=f"knama_{k['id']}")
-            k["kapasitas"] = st.number_input(f"Kapasitas Slot:", min_value=1, value=k["kapasitas"], key=f"kkap_{k['id']}")
+            with st.container(border=True):
+                k["nama"] = st.text_input(
+                    f"Nama Kelompok (ID {k['id']}):",
+                    value=k["nama"],
+                    key=f"knama_{k['id']}",
+                )
+                k["kapasitas"] = st.number_input(
+                    "Batas Kapasitas Slot:",
+                    min_value=1,
+                    value=k["kapasitas"],
+                    key=f"kkap_{k['id']}",
+                )
 
-        if st.button("🔴 Reset Semua Data Anggota"):
-            st.session_state.data_anggota = pd.DataFrame(columns=["NIM_Nama", "Kelompok_ID"])
+        st.divider()
+        # Fitur Hapus Total untuk membebaskan ruang bagi PJ Mata Kuliah Selanjutnya
+        if st.button(
+            "🔴 TUTUP & RESET TOTAL SESI INI",
+            type="secondary",
+            help=(
+                "Menghapus sesi ini agar PJ mata kuliah lain bisa membuat sesi"
+                " baru."
+            ),
+        ):
+            st.session_state.config = {}
+            st.session_state.kelompok_list = []
+            st.session_state.data_anggota = pd.DataFrame(
+                columns=["Nama", "NPM", "Kelompok_ID", "Nama_Kelompok"]
+            )
+            st.session_state.sesi_aktif = False
             st.rerun()
+    elif pass_input != "":
+        st.error(
+            "PIN Salah! Hanya PJ pembuat sesi yang dapat memodifikasi data."
+        )
 
-# --- PAPAN VISUAL KELOMPOK (REAL-TIME DISPLAY DENGAN FRAGMENT BAWAN) ---
-st.subheader("📋 Papan Slot Kelompok")
+# --- PAPAN VISUAL KELOMPOK (REAL-TIME GRID DISPLAY) ---
+st.subheader("📋 Papan Slot Kelompok Kelas")
 
-# Fungsi Fragment bawaan Streamlit untuk autorefresh real-time otomatis setiap 3 detik secara aman
+
 @st.fragment(run_every=3)
-def tampilkan_papan_realtime(input_id_user):
-    # Mengambil data terbaru dari session state
-    df_aktif = st.session_state.data_anggota
-    cols = st.columns(3) # Tampilkan dalam 3 kolom visual
+def render_papan_interaktif(nama_user, npm_user):
+    df_current = st.session_state.data_anggota
+    cols = st.columns(3)  # Grid otomatis membagi 3 kolom responsif PC/HP
 
     for idx, kel in enumerate(st.session_state.kelompok_list):
         col = cols[idx % 3]
-        
-        # Ambil anggota di kelompok ini
-        members = df_aktif[df_aktif["Kelompok_ID"] == kel["id"]]["NIM_Nama"].tolist()
-        terisi = len(members)
+        members_df = df_current[df_current["Kelompok_ID"] == kel["id"]]
+        terisi = len(members_df)
         kapasitas = kel["kapasitas"]
-        
+
         with col:
             with st.container(border=True):
                 st.markdown(f"### 👥 {kel['nama']}")
                 st.progress(min(terisi / kapasitas, 1.0))
-                st.caption(f"Status Slot: **{terisi} / {kapasitas} Terisi**")
-                
-                # List Anggota Terdaftar
+
+                if terisi >= kapasitas:
+                    st.markdown(
+                        "Status Slot: <span"
+                        f" class='status-penuh'>{terisi} / {kapasitas}"
+                        " (Penuh)</span>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        "Status Slot: <span"
+                        f" class='status-tersedia'>{terisi} / {kapasitas}"
+                        " Tersedia</span>",
+                        unsafe_allow_html=True,
+                    )
+
+                st.write("")
+                # Tampilkan slot isi / kosong
                 for i in range(kapasitas):
                     if i < terisi:
-                        st.error(f"🔴 **Slot {i+1}:** {members[i]}")
+                        m_row = members_df.iloc[i]
+                        st.error(
+                            f"🔴 **Slot {i+1}:** {m_row['Nama']}"
+                            f" ({m_row['NPM']})"
+                        )
                     else:
                         st.success(f"🟢 **Slot {i+1}:** [ KOSONG ]")
-                
-                # Tombol Pilih Slot untuk Mahasiswa
-                if not st.session_state.config["dikunci"] and input_id_user:
-                    sudah_daftar = not df_aktif[df_aktif["NIM_Nama"].str.lower() == input_id_user.lower()].empty
-                    
-                    if not sudah_daftar and terisi < kapasitas:
-                        if st.button(f"Pilih {kel['nama']}", key=f"btn_join_{kel['id']}"):
-                            new_row = pd.DataFrame([{"NIM_Nama": input_id_user, "Kelompok_ID": kel["id"]}])
-                            st.session_state.data_anggota = pd.concat([st.session_state.data_anggota, new_row], ignore_index=True)
-                            st.rerun()
 
-# Menjalankan fungsi papan real-time
-tampilkan_papan_realtime(input_identitas)
+                # Validasi Tombol Pendaftaran tanpa perlu Enter Keyboard
+                if (
+                    not st.session_state.config.get("dikunci", False)
+                    and nama_user
+                    and npm_user
+                ):
+                    is_registered = not df_current[
+                        (df_current["Nama"].str.lower() == nama_user.lower())
+                        | (df_current["NPM"] == npm_user)
+                    ].empty
+                    tombol_mati = is_registered or (terisi >= kapasitas)
+                    if st.button(
+                        f"Pilih {kel['nama']}",
+                        key=f"btn_pilih_{kel['id']}",
+                        disabled=tombol_mati,
+                        type="primary",
+                    ):
+                        new_member = pd.DataFrame(
+                            [{
+                                "Nama": nama_user,
+                                "NPM": npm_user,
+                                "Kelompok_ID": kel["id"],
+                                "Nama_Kelompok": kel["nama"],
+                            }]
+                        )
+                        st.session_state.data_anggota = pd.concat(
+                            [st.session_state.data_anggota, new_member],
+                            ignore_index=True,
+                        )
+                        st.rerun()
+
+
+# Menjalankan Papan Utama
+render_papan_interaktif(
+    input_nama if "input_nama" in locals() else "",
+    input_npm if "input_npm" in locals() else "",
+)
 
 st.divider()
 
-# --- EKSPOR DATA UNTUK DOSEN ---
-st.subheader("📥 Download Hasil Pembagian Kelompok")
-
+# --- EKSPOR DATA REKAPITULASI (URUT DAN RAPI PER KELOMPOK) ---
+st.subheader("📥 Download Hasil Pendaftaran PJ")
 if not st.session_state.data_anggota.empty:
-    # Menggabungkan data nama kelompok untuk hasil ekspor
-    export_df = st.session_state.data_anggota.copy()
-    map_kel = {k["id"]: k["nama"] for k in st.session_state.kelompok_list}
-    export_df["Nama Kelompok"] = export_df["Kelompok_ID"].map(map_kel)
-    export_df = export_df[["Nama Kelompok", "NIM_Nama"]].rename(columns={"NIM_Nama": "Nama / NIM Mahasiswa"})
-    
-    csv_bytes = export_df.to_csv(index=False).encode('utf-8')
+    df_download = st.session_state.data_anggota.copy()
+    # Otomatis disortir berurutan dari Kelompok 1, 2, 3 dst beserta nama mahasiswa di dalamnya
+    df_download = df_download.sort_values(
+        by=["Kelompok_ID", "Nama"]
+    ).reset_index(drop=True)
+    df_final_view = df_download[
+        ["Nama_Kelompok", "Nama", "NPM"]
+    ].rename(
+        columns={
+            "Nama_Kelompok": "Kelompok",
+            "Nama": "Nama Lengkap Mahasiswa",
+            "NPM": "NPM / NIM",
+        }
+    )
+
+    # Preview tabel rekapitulasi rapi di layar sebelum diunduh
+    st.dataframe(df_final_view, use_container_width=True)
+
+    # Proses konversi data ke format Excel asli (.xlsx)
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df_final_view.to_excel(
+            writer, index=False, sheet_name="Rekap Kelompok Kelas"
+        )
+
     st.download_button(
-        label="📄 Download File Excel / CSV",
-        data=csv_bytes,
-        file_name=f"kelompok_{cfg['judul'].replace(' ', '_')}.csv",
-        mime="text/csv"
+        label="🟢 Download File Rekapitulasi Excel (.xlsx)",
+        data=buffer.getvalue(),
+        file_name=f"REKAP_KELOMPOK_{cfg['judul'].replace(' ', '_')}.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
     )
 else:
-    st.info("Belum ada mahasiswa yang terdaftar.")
+    st.info("Belum ada mahasiswa yang mengisi slot pendaftaran kelompok.")

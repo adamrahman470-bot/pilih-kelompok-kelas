@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
-from streamlit_autorenew import st_autorefresh
+import time
 
-# 1. Konfigurasi Halaman & Autorefresh Real-Time (Setiap 3 Detik)
+# 1. Konfigurasi Halaman Utama
 st.set_page_config(page_title="Sistem Pemilihan Kelompok Kelas", layout="wide", page_icon="👥")
-st_autorefresh(interval=3000, key="realtime_refresh")
 
 # 2. Inisialisasi State / Database Lokal dalam Sesi
 if "config" not in st.session_state:
@@ -38,6 +37,7 @@ st.sidebar.header("👤 Input Data Mahasiswa")
 
 if cfg["dikunci"]:
     st.sidebar.error("🔒 Pemilihan kelompok telah DIKUNCI oleh PJ/Admin.")
+    input_identitas = ""
 else:
     input_identitas = st.sidebar.text_input("Masukkan Nama / NIM Anda:").strip()
 
@@ -107,50 +107,58 @@ with st.sidebar.expander("🔑 Panel Kontrol PJ / Admin"):
             st.session_state.data_anggota = pd.DataFrame(columns=["NIM_Nama", "Kelompok_ID"])
             st.rerun()
 
-# --- PAPAN VISUAL KELOMPOK (REAL-TIME DISPLAY) ---
+# --- PAPAN VISUAL KELOMPOK (REAL-TIME DISPLAY DENGAN FRAGMENT BAWAN) ---
 st.subheader("📋 Papan Slot Kelompok")
 
-cols = st.columns(3) # Tampilkan dalam 3 kolom visual
+# Fungsi Fragment bawaan Streamlit untuk autorefresh real-time otomatis setiap 3 detik secara aman
+@st.fragment(run_every=3)
+def tampilkan_papan_realtime(input_id_user):
+    # Mengambil data terbaru dari session state
+    df_aktif = st.session_state.data_anggota
+    cols = st.columns(3) # Tampilkan dalam 3 kolom visual
 
-for idx, kel in enumerate(st.session_state.kelompok_list):
-    col = cols[idx % 3]
-    
-    # Ambil anggota di kelompok ini
-    members = df_anggota[df_anggota["Kelompok_ID"] == kel["id"]]["NIM_Nama"].tolist()
-    terisi = len(members)
-    kapasitas = kel["kapasitas"]
-    
-    with col:
-        with st.container(border=True):
-            st.markdown(f"### 👥 {kel['nama']}")
-            st.progress(min(terisi / kapasitas, 1.0))
-            st.caption(f"Status Slot: **{terisi} / {kapasitas} Terisi**")
-            
-            # List Anggota Terdaftar
-            for i in range(kapasitas):
-                if i < terisi:
-                    st.error(f"🔴 **Slot {i+1}:** {members[i]}")
-                else:
-                    st.success(f"🟢 **Slot {i+1}:** [ KOSONG ]")
-            
-            # Tombol Pilih Slot untuk Mahasiswa
-            if not cfg["dikunci"] and 'input_identitas' in locals() and input_identitas:
-                sudah_daftar = not df_anggota[df_anggota["NIM_Nama"].str.lower() == input_identitas.lower()].empty
+    for idx, kel in enumerate(st.session_state.kelompok_list):
+        col = cols[idx % 3]
+        
+        # Ambil anggota di kelompok ini
+        members = df_aktif[df_aktif["Kelompok_ID"] == kel["id"]]["NIM_Nama"].tolist()
+        terisi = len(members)
+        kapasitas = kel["kapasitas"]
+        
+        with col:
+            with st.container(border=True):
+                st.markdown(f"### 👥 {kel['nama']}")
+                st.progress(min(terisi / kapasitas, 1.0))
+                st.caption(f"Status Slot: **{terisi} / {kapasitas} Terisi**")
                 
-                if not sudah_daftar and terisi < kapasitas:
-                    if st.button(f"Pilih {kel['nama']}", key=f"btn_join_{kel['id']}"):
-                        new_row = pd.DataFrame([{"NIM_Nama": input_identitas, "Kelompok_ID": kel["id"]}])
-                        st.session_state.data_anggota = pd.concat([st.session_state.data_anggota, new_row], ignore_index=True)
-                        st.rerun()
+                # List Anggota Terdaftar
+                for i in range(kapasitas):
+                    if i < terisi:
+                        st.error(f"🔴 **Slot {i+1}:** {members[i]}")
+                    else:
+                        st.success(f"🟢 **Slot {i+1}:** [ KOSONG ]")
+                
+                # Tombol Pilih Slot untuk Mahasiswa
+                if not st.session_state.config["dikunci"] and input_id_user:
+                    sudah_daftar = not df_aktif[df_aktif["NIM_Nama"].str.lower() == input_id_user.lower()].empty
+                    
+                    if not sudah_daftar and terisi < kapasitas:
+                        if st.button(f"Pilih {kel['nama']}", key=f"btn_join_{kel['id']}"):
+                            new_row = pd.DataFrame([{"NIM_Nama": input_id_user, "Kelompok_ID": kel["id"]}])
+                            st.session_state.data_anggota = pd.concat([st.session_state.data_anggota, new_row], ignore_index=True)
+                            st.rerun()
+
+# Menjalankan fungsi papan real-time
+tampilkan_papan_realtime(input_identitas)
 
 st.divider()
 
 # --- EKSPOR DATA UNTUK DOSEN ---
 st.subheader("📥 Download Hasil Pembagian Kelompok")
 
-if not df_anggota.empty:
+if not st.session_state.data_anggota.empty:
     # Menggabungkan data nama kelompok untuk hasil ekspor
-    export_df = df_anggota.copy()
+    export_df = st.session_state.data_anggota.copy()
     map_kel = {k["id"]: k["nama"] for k in st.session_state.kelompok_list}
     export_df["Nama Kelompok"] = export_df["Kelompok_ID"].map(map_kel)
     export_df = export_df[["Nama Kelompok", "NIM_Nama"]].rename(columns={"NIM_Nama": "Nama / NIM Mahasiswa"})

@@ -72,32 +72,41 @@ st.markdown("""
 
 st.divider()
 
-# FITUR PENCARIAN & PEMILIHAN KELAS UNTUK PONSEL & LAPTOP
-list_kelas_semua = ambil_semua_kelas()
+# --- FITUR PENCARIAN & PILIHAN RUANG KELAS (MOBILE-FRIENDLY KEYBOARD SEARCH) ---
+list_kelas = ambil_semua_kelas()
 
-col_search1, col_search2 = st.columns([1, 1])
+st.write("### 🔍 Cari & Pilih Ruang Kelas Anda")
 
-with col_search1:
-    search_keyword = st.text_input("🔍 Cari Nama Kelas / Matkul:", placeholder="Ketik di sini (keyboard HP otomatis muncul)...").strip()
+# Kolom pencarian berbasis Text Input (Pasti memicu Keyboard HP saat diketuk)
+search_query = st.text_input(
+    "Ketik nama kelas / mata kuliah:",
+    placeholder="Ketik di sini (contoh: R3L, Ekonomika...)",
+    help="Mengetik di sini akan menyaring daftar pilihan kelas di bawah secara langsung."
+).strip()
 
-# Filter daftar kelas berdasarkan keyword pencarian
-if search_keyword:
-    list_kelas_filtered = [k for k in list_kelas_semua if search_keyword.lower() in k.lower()]
+# Logika filter menyaring daftar kelas berdasarkan input ketikan
+if search_query:
+    filtered_kelas = [k for k in list_kelas if search_query.lower() in k.lower()]
 else:
-    list_kelas_filtered = list_kelas_semua
+    filtered_kelas = list_kelas
 
-with col_search2:
-    if len(list_kelas_filtered) > 0:
-        pilihan_kelas = st.selectbox(
-            f"📋 Pilih Hasil Kelas ({len(list_kelas_filtered)} ditemukan):",
-            options=["-- Pilih Kelas --"] + list_kelas_filtered
-        )
-    else:
-        st.warning("⚠️ Kelas tidak ditemukan. Periksa kata kunci pencarian Anda.")
-        pilihan_kelas = "-- Pilih Kelas --"
+# Dropdown dinamis berdasarkan hasil penyaringan
+if filtered_kelas:
+    pilihan_kelas = st.selectbox(
+        f"Hasil pencarian ({len(filtered_kelas)} kelas ditemukan):",
+        options=["-- Pilih dari hasil pencarian di bawah --"] + filtered_kelas,
+        index=0
+    )
+else:
+    st.warning("⚠️ Kelas tidak ditemukan. Pastikan ejaan benar atau buat ruang kelas baru pada menu di bawah.")
+    pilihan_kelas = "-- Pilih dari hasil pencarian di bawah --"
+
+# Penyesuaian nama variabel untuk menjaga kompatibilitas alur utama
+if pilihan_kelas == "-- Pilih dari hasil pencarian di bawah --":
+    pilihan_kelas = "-- Ketik nama kelas / Pilih dari daftar --"
 
 # --- ALUR UTAMA JIKA KELAS DIPILIH ---
-if pilihan_kelas != "-- Pilih Kelas --":
+if pilihan_kelas != "-- Ketik nama kelas / Pilih dari daftar --":
     detail_kelas = ambil_detail_kelas(pilihan_kelas)
     list_kelompok = ambil_kelompok_kelas(pilihan_kelas)
     df_anggota = ambil_anggota_kelas(pilihan_kelas)
@@ -308,7 +317,7 @@ with st.expander("➕ PJ Baru? Klik di Sini untuk Membuat Ruang Pembagian Kelomp
                 # ANIMASI & BALASAN VISUAL SUKSES
                 st.balloons()
                 st.success(f"🎉 **BERHASIL!** Ruang kelas '{new_nama_kelas}' telah aktif dan siap digunakan.")
-                time.sleep(1.8)
+                time.sleep(1.8) # Jeda singkat agar pengguna dapat menikmati animasi sukses
                 st.rerun()
             except Exception as e:
                 err_msg = str(e)

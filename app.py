@@ -9,11 +9,25 @@ st.set_page_config(page_title="Sistem Kelompok Kelas Real-Time", layout="wide", 
 st.markdown("""
     <style>
     .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
-    h1 { color: #1E3A8A; font-weight: 800; text-align: center; }
+    h1 { color: #1E3A8A; font-weight: 800; text-align: center; margin-bottom: 0.2rem; }
     .stButton>button { width: 100%; border-radius: 6px; font-weight: 600; }
     .status-penuh { color: #DC2626; font-weight: bold; background-color: #FEE2E2; padding: 2px 8px; border-radius: 4px; }
     .status-tersedia { color: #16A34A; font-weight: bold; background-color: #DCFCE7; padding: 2px 8px; border-radius: 4px; }
     .card-kelompok { background-color: #FFFFFF; border: 1px solid #E5E7EB; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    
+    /* Style Kustom Badge Pengembang */
+    .dev-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%);
+        color: #FFFFFF !important;
+        padding: 5px 18px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        box-shadow: 0 4px 10px rgba(30, 58, 138, 0.25);
+        margin-top: 8px;
+    }
     </style>""", unsafe_allow_html=True)
 
 # 2. KONEKSI DATABASE SUPABASE SECARA AMAN
@@ -48,7 +62,15 @@ def ambil_anggota_kelas(nama_kelas):
 
 # --- TAMPILAN UTAMA ---
 st.title("👥 Sistem Pemilihan Kelompok Kelas Universal")
-st.markdown("<p style='text-align: center; color: #4B5563;'>Sistem pembagian slot kelompok terintegrasi cloud, anti-bentrok, dan real-time untuk seluruh program studi.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #9CA3AF; margin-bottom: 0px;'>Sistem pembagian slot kelompok terintegrasi cloud, anti-bentrok, dan real-time untuk seluruh program studi.</p>", unsafe_allow_html=True)
+
+# TAMPILAN ELEGAN IDENTITAS PENGEMBANG
+st.markdown("""
+    <div style='text-align: center; margin-bottom: 25px;'>
+        <span class='dev-badge'>⚡ Designed & Developed by <b>Adam Rahman D.A</b></span>
+    </div>
+""", unsafe_allow_html=True)
+
 st.divider()
 
 # PILIHAN RUANG KELAS UTAMA
@@ -155,7 +177,7 @@ if pilihan_kelas != "-- Pilih Kelas --":
     else:
         st.info("Belum ada mahasiswa yang mengambil slot kelompok di kelas ini.")
 
-    # --- PANEL KONTROL KHUSUS PJ (LENGKAP EDIT STRUKTUR KELOMPOK) ---
+    # --- PANEL KONTROL KHUSUS PJ ---
     st.write("##")
     with st.expander("🔑 Panel Manajemen Kontrol PJ Kelas (Butuh PIN Auth)"):
         input_pin = st.text_input("Masukkan PIN Admin Kelas Ini:", type="password", key=f"pin_{pilihan_kelas}")
@@ -165,7 +187,6 @@ if pilihan_kelas != "-- Pilih Kelas --":
             edit_desk = st.text_area("Ubah Deskripsi Petunjuk:", value=detail_kelas["deskripsi"])
             toggle_kunci = st.toggle("🔒 Kunci Akses Pengisian Mahasiswa", value=detail_kelas.get("dikunci", False))
             
-            # FITUR BARU: Edit Jumlah Kelompok dan Kapasitas
             col_e1, col_e2 = st.columns(2)
             with col_e1:
                 edit_j_kel = st.number_input(
@@ -183,7 +204,6 @@ if pilihan_kelas != "-- Pilih Kelas --":
                 )
             
             if st.button("💾 Simpan Perubahan Setelan Kelas", type="primary"):
-                # 1. Update data master kelas
                 supabase.table("master_kelas").update({
                     "deskripsi": edit_desk,
                     "dikunci": toggle_kunci,
@@ -191,17 +211,14 @@ if pilihan_kelas != "-- Pilih Kelas --":
                     "kapasitas_per_kelompok": int(edit_kap)
                 }).eq("nama_kelas", pilihan_kelas).execute()
                 
-                # 2. Update kapasitas seluruh kelompok yang ada
                 supabase.table("data_kelompok").update({
                     "kapasitas": int(edit_kap)
                 }).eq("nama_kelas", pilihan_kelas).execute()
                 
-                # 3. Penyesuaian Penambahan / Pengurangan Jumlah Kelompok
                 current_count = len(list_kelompok)
                 new_count = int(edit_j_kel)
                 
                 if new_count > current_count:
-                    # Buat kelompok tambahan
                     new_groups = [
                         {
                             "nama_kelas": pilihan_kelas,
@@ -213,7 +230,6 @@ if pilihan_kelas != "-- Pilih Kelas --":
                     supabase.table("data_kelompok").insert(new_groups).execute()
                 
                 elif new_count < current_count:
-                    # Hapus kelompok ekstra dari urutan terbesar
                     groups_to_remove = [f"Kelompok {i}" for i in range(new_count + 1, current_count + 1)]
                     for g_name in groups_to_remove:
                         supabase.table("anggota_kelas").delete().eq("nama_kelas", pilihan_kelas).eq("nama_kelompok", g_name).execute()
@@ -249,7 +265,6 @@ with st.expander("➕ PJ Baru? Klik di Sini untuk Membuat Ruang Pembagian Kelomp
     if st.button("🚀 Buat dan Aktifkan Ruang Kelas", type="primary"):
         if new_nama_kelas and new_pin:
             try:
-                # 1. Daftarkan kelas ke database
                 supabase.table("master_kelas").insert({
                     "nama_kelas": new_nama_kelas,
                     "deskripsi": new_deskripsi,
@@ -259,7 +274,6 @@ with st.expander("➕ PJ Baru? Klik di Sini untuk Membuat Ruang Pembagian Kelomp
                     "dikunci": False
                 }).execute()
                 
-                # 2. Batch Insert kelompok secara efisien
                 data_kelompok_batch = [
                     {
                         "nama_kelas": new_nama_kelas,

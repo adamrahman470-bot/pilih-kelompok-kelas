@@ -66,7 +66,7 @@ st.markdown("<p style='text-align: center; color: #9CA3AF; margin-bottom: 0px;'>
 
 st.markdown("""
     <div style='text-align: center; margin-bottom: 25px;'>
-        <span class='dev-badge'>⚡ Designed & Developed by <b>Adam Rahman D.A</b></span>
+        <span class='dev-badge'>⚡ Designed & Developed by <b>Adam Rahman D.A. S.T.</b></span>
     </div>
 """, unsafe_allow_html=True)
 

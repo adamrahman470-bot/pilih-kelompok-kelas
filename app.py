@@ -72,41 +72,20 @@ st.markdown("""
 
 st.divider()
 
-# --- FITUR PENCARIAN & PILIHAN RUANG KELAS (MOBILE-FRIENDLY KEYBOARD SEARCH) ---
+# --- PILIHAN & PENCARIAN RUANG KELAS (SINGLE ELEGAN INPUT) ---
 list_kelas = ambil_semua_kelas()
 
-st.write("### 🔍 Cari & Pilih Ruang Kelas Anda")
-
-# Kolom pencarian berbasis Text Input (Pasti memicu Keyboard HP saat diketuk)
-search_query = st.text_input(
-    "Ketik nama kelas / mata kuliah:",
-    placeholder="Ketik di sini (contoh: R3L, Ekonomika...)",
-    help="Mengetik di sini akan menyaring daftar pilihan kelas di bawah secara langsung."
-).strip()
-
-# Logika filter menyaring daftar kelas berdasarkan input ketikan
-if search_query:
-    filtered_kelas = [k for k in list_kelas if search_query.lower() in k.lower()]
-else:
-    filtered_kelas = list_kelas
-
-# Dropdown dinamis berdasarkan hasil penyaringan
-if filtered_kelas:
-    pilihan_kelas = st.selectbox(
-        f"Hasil pencarian ({len(filtered_kelas)} kelas ditemukan):",
-        options=["-- Pilih dari hasil pencarian di bawah --"] + filtered_kelas,
-        index=0
-    )
-else:
-    st.warning("⚠️ Kelas tidak ditemukan. Pastikan ejaan benar atau buat ruang kelas baru pada menu di bawah.")
-    pilihan_kelas = "-- Pilih dari hasil pencarian di bawah --"
-
-# Penyesuaian nama variabel untuk menjaga kompatibilitas alur utama
-if pilihan_kelas == "-- Pilih dari hasil pencarian di bawah --":
-    pilihan_kelas = "-- Ketik nama kelas / Pilih dari daftar --"
+# Menggunakan 1 Selectbox Tunggal yang langsung bisa di-search
+pilihan_kelas = st.selectbox(
+    "🔍 Cari / Pilih Ruang Kelas atau Mata Kuliah Anda:",
+    options=list_kelas,
+    index=None,
+    placeholder="Ketik atau pilih nama kelas Anda...",
+    help="Ketuk kolom ini dan ketik nama kelas/matkul Anda untuk mencari secara instan."
+)
 
 # --- ALUR UTAMA JIKA KELAS DIPILIH ---
-if pilihan_kelas != "-- Ketik nama kelas / Pilih dari daftar --":
+if pilihan_kelas:
     detail_kelas = ambil_detail_kelas(pilihan_kelas)
     list_kelompok = ambil_kelompok_kelas(pilihan_kelas)
     df_anggota = ambil_anggota_kelas(pilihan_kelas)
@@ -317,7 +296,7 @@ with st.expander("➕ PJ Baru? Klik di Sini untuk Membuat Ruang Pembagian Kelomp
                 # ANIMASI & BALASAN VISUAL SUKSES
                 st.balloons()
                 st.success(f"🎉 **BERHASIL!** Ruang kelas '{new_nama_kelas}' telah aktif dan siap digunakan.")
-                time.sleep(1.8) # Jeda singkat agar pengguna dapat menikmati animasi sukses
+                time.sleep(1.8)
                 st.rerun()
             except Exception as e:
                 err_msg = str(e)

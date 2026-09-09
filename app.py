@@ -17,7 +17,6 @@ st.markdown("""
     </style>""", unsafe_allow_html=True)
 
 # 2. KONEKSI DATABASE SUPABASE SECARA AMAN
-# Mengambil kredensial dari Streamlit Secrets (Akan kita setting di Langkah 5)
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
@@ -27,10 +26,13 @@ def init_supabase():
 
 supabase: Client = init_supabase()
 
-# --- FUNGSI-FUNGSI ENGINE DATABASE (CRUD CORES) ---
+# --- FUNGSI ENGINE DATABASE ---
 def ambil_semua_kelas():
-    res = supabase.table("master_kelas").select("nama_kelas").order("nama_kelas").execute()
-    return [item["nama_kelas"] for item in res.data]
+    try:
+        res = supabase.table("master_kelas").select("nama_kelas").order("nama_kelas").execute()
+        return [item["nama_kelas"] for item in res.data]
+    except Exception:
+        return []
 
 def ambil_detail_kelas(nama_kelas):
     res = supabase.table("master_kelas").select("*").eq("nama_kelas", nama_kelas).execute()
@@ -44,37 +46,35 @@ def ambil_anggota_kelas(nama_kelas):
     res = supabase.table("anggota_kelas").select("*").eq("nama_kelas", nama_kelas).execute()
     return pd.DataFrame(res.data) if res.data else pd.DataFrame(columns=["nama_mahasiswa", "npm_mahasiswa", "nama_kelompok"])
 
-# --- TAMPILAN UTAMA INTERAKTIF ---
+# --- TAMPILAN UTAMA ---
 st.title("👥 Sistem Pemilihan Kelompok Kelas Universal")
 st.markdown("<p style='text-align: center; color: #4B5563;'>Sistem pembagian slot kelompok terintegrasi cloud, anti-bentrok, dan real-time untuk seluruh program studi.</p>", unsafe_allow_html=True)
 st.divider()
 
-# PILIHAN RUANG KELAS UTAMA UNTUK MAHASISWA DAN PJ
+# PILIHAN RUANG KELAS UTAMA
 list_kelas = ambil_semua_kelas()
 col_header1, col_header2 = st.columns([2, 1])
 with col_header1:
     pilihan_kelas = st.selectbox("📖 Pilih Ruang Kelas / Mata Kuliah Anda:", ["-- Pilih Kelas --"] + list_kelas)
 
-# --- ALUR UTAMA JIKA KELAS SUDAH DIPILIH ---
+# --- ALUR UTAMA JIKA KELAS DIPILIH ---
 if pilihan_kelas != "-- Pilih Kelas --":
     detail_kelas = ambil_detail_kelas(pilihan_kelas)
     list_kelompok = ambil_kelompok_kelas(pilihan_kelas)
     df_anggota = ambil_anggota_kelas(pilihan_kelas)
     
-    # RENDER HEADER SPESIFIK KELOMPOK
     st.subheader(f"📌 {detail_kelas['nama_kelas']}")
     st.info(f"💬 Petunjuk PJ: {detail_kelas['deskripsi']}")
     
-    # SIDEBAR KHUSUS PENDAFTARAN MAHASISWA (SANGAT KETAT)
+    # SIDEBAR FORM MAHASISWA
     st.sidebar.header("👤 Form Pendaftaran")
-    if detail_kelas["dikunci"]:
+    if detail_kelas.get("dikunci", False):
         st.sidebar.error("🔒 Pendaftaran kelompok untuk kelas ini telah DIKUNCI oleh PJ.")
         input_nama, input_npm = "", ""
     else:
         input_nama = st.sidebar.text_input("Masukkan Nama Lengkap:").strip()
         input_npm = st.sidebar.text_input("Masukkan NPM / NIM:").strip()
         
-        # Validasi Keketatan Data Mahasiswa (Anti-Ganda/Anti-Curang)
         sudah_daftar = not df_anggota[df_anggota["npm_mahasiswa"] == input_npm].empty if input_npm else False
         
         if input_nama and input_npm:
@@ -87,9 +87,9 @@ if pilihan_kelas != "-- Pilih Kelas --":
                     st.sidebar.success("Slot Anda berhasil dibatalkan!")
                     st.rerun()
             else:
-                st.sidebar.info("🟢 Identitas aman. Silakan klik tombol 'Ambil Slot' di kanan.")
+                st.sidebar.info("🟢 Identitas aman. Silakan klik tombol 'Ambil Slot' pada kelompok pilihan Anda.")
 
-    # --- PAPAN VISUAL GRID RESPONSIVE (MAHASISWA ONLY SCREEN) ---
+    # PAPAN KETERSAAN SLOT
     st.write("### 📋 Papan Ketersediaan Slot Kelompok")
     cols = st.columns(3)
     
@@ -106,7 +106,6 @@ if pilihan_kelas != "-- Pilih Kelas --":
             </div>
             """, unsafe_allow_html=True)
             
-            # Progress Bar Status Keterisian
             st.progress(min(terisi / kapasitas, 1.0))
             if terisi >= kapasitas:
                 st.markdown(f"Status: <span class='status-penuh'>{terisi} / {kapasitas} (Penuh)</span>", unsafe_allow_html=True)
@@ -114,7 +113,6 @@ if pilihan_kelas != "-- Pilih Kelas --":
                 st.markdown(f"Status: <span class='status-tersedia'>{terisi} / {kapasitas} Tersedia</span>", unsafe_allow_html=True)
             
             st.write("")
-            # Render list nama di dalam slot
             for i in range(kapasitas):
                 if i < terisi:
                     row_mhs = m_terdaftar.iloc[i]
@@ -122,8 +120,7 @@ if pilihan_kelas != "-- Pilih Kelas --":
                 else:
                     st.success(f"🟢 **Slot {i+1}:** [ KOSONG ]")
             
-            # Tombol Eksekusi Instan untuk Mahasiswa
-            if not detail_kelas["dikunci"] and input_nama and input_npm and not sudah_daftar:
+            if not detail_kelas.get("dikunci", False) and input_nama and input_npm and not sudah_daftar:
                 if terisi < kapasitas:
                     if st.button(f"Ambil Slot {kel['nama_kelompok']}", key=f"join_{kel['kelompok_id']}", type="primary"):
                         supabase.table("anggota_kelas").insert({
@@ -135,10 +132,9 @@ if pilihan_kelas != "-- Pilih Kelas --":
                         st.rerun()
             st.write("---")
 
-    # --- FITUR DOWNLOAD REKAP OTOMATIS FILTER FILTER PER KELOMPOK ---
+    # DOWNLOAD REKAP EXCEL
     st.write("### 📥 Unduh Berkas Rekap Kelas")
     if not df_anggota.empty:
-        # Otomatis mensortir rapi per kelompok dan nama mahasiswa
         df_rapi = df_anggota.sort_values(by=["nama_kelompok", "nama_mahasiswa"]).reset_index(drop=True)
         df_export = df_rapi[["nama_kelompok", "nama_mahasiswa", "npm_mahasiswa"]].rename(
             columns={"nama_kelompok": "Kelompok", "nama_mahasiswa": "Nama Lengkap Mahasiswa", "npm_mahasiswa": "NPM / NIM"}
@@ -159,15 +155,15 @@ if pilihan_kelas != "-- Pilih Kelas --":
     else:
         st.info("Belum ada mahasiswa yang mengambil slot kelompok di kelas ini.")
 
-    # --- PANEL KONTROL KHUSUS PJ (TERKUNCI PIN TEGAS) ---
+    # PANEL KONTROL PJ
     st.write("##")
     with st.expander("🔑 Panel Manajemen Kontrol PJ Kelas (Butuh PIN Auth)"):
         input_pin = st.text_input("Masukkan PIN Admin Kelas Ini:", type="password", key=f"pin_{pilihan_kelas}")
         if input_pin == detail_kelas["pin_admin"]:
-            st.success("🔓 Hak Akses PJ Terverifikasi! Anda diizinkan merubah pengaturan.")
+            st.success("🔓 Hak Akses PJ Terverifikasi!")
             
             edit_desk = st.text_area("Ubah Deskripsi Petunjuk:", value=detail_kelas["deskripsi"])
-            toggle_kunci = st.toggle("🔒 Kunci Akses Pengisian Mahasiswa (Lock All)", value=detail_kelas["dikunci"])
+            toggle_kunci = st.toggle("🔒 Kunci Akses Pengisian Mahasiswa", value=detail_kelas.get("dikunci", False))
             
             if st.button("💾 Simpan Perubahan Setelan Kelas"):
                 supabase.table("master_kelas").update({"deskripsi": edit_desk, "dikunci": toggle_kunci}).eq("nama_kelas", pilihan_kelas).execute()
@@ -175,19 +171,18 @@ if pilihan_kelas != "-- Pilih Kelas --":
                 st.rerun()
                 
             st.divider()
-            st.write("**⚠️ Menu Bahaya Kontrol Sesi:**")
             if st.button("🔴 RESET & HAPUS TOTAL RUANG KELAS INI"):
                 supabase.table("master_kelas").delete().eq("nama_kelas", pilihan_kelas).execute()
-                st.success("Ruang kelas sukses dihapus dari database pusat!")
+                st.success("Ruang kelas sukses dihapus!")
                 st.rerun()
         elif input_pin != "":
-            st.error("PIN Salah! Mahasiswa dilarang mengotak-atik panel ini.")
+            st.error("PIN Salah!")
 
-# --- ALUR JIKA PJ INGIN MEMBUAT RUANG BARU SECARA REAL-TIME ---
+# --- PEMBUATAN RUANG KELAS BARU ---
 st.divider()
 with st.expander("➕ PJ Baru? Klik di Sini untuk Membuat Ruang Pembagian Kelompok Baru"):
     st.write("Buat ruang pendaftaran terpisah khusus untuk kelas atau mata kuliah Anda sendiri:")
-    new_nama_kelas = st.text_input("Nama Mata Kuliah & Kelas:", placeholder="Contoh: Basis Data Kelas R4D")
+    new_nama_kelas = st.text_input("Nama Mata Kuliah & Kelas:", placeholder="Contoh: Pembagian kelompok R3L Ekonomika")
     new_deskripsi = st.text_area("Deskripsi / Aturan Kelompok:", value="Pilih slot kelompokmu yang masih tersedia. Ingat, satu mahasiswa hanya bisa memilih 1 slot!")
     
     col_c1, col_c2 = st.columns(2)
@@ -196,31 +191,39 @@ with st.expander("➕ PJ Baru? Klik di Sini untuk Membuat Ruang Pembagian Kelomp
     with col_c2:
         new_kap = st.number_input("Kapasitas Batas Anggota per Kelompok:", min_value=1, max_value=100, value=4)
         
-    new_pin = st.text_input("Buat PIN Keamanan Admin Ruang Ini:", type="password", help="PIN ini wajib Anda simpan untuk mengontrol kelas ini ke depannya.")
+    new_pin = st.text_input("Buat PIN Keamanan Admin Ruang Ini:", type="password", help="PIN ini wajib Anda simpan untuk mengontrol kelas ini.")
     
     if st.button("🚀 Buat dan Aktifkan Ruang Kelas", type="primary"):
         if new_nama_kelas and new_pin:
             try:
-                # 1. Daftarkan kelas ke database pusat
+                # 1. Daftarkan kelas ke database
                 supabase.table("master_kelas").insert({
                     "nama_kelas": new_nama_kelas,
                     "deskripsi": new_deskripsi,
                     "pin_admin": new_pin,
                     "jumlah_kelompok": int(new_j_kel),
-                    "kapasitas_per_kelompok": int(new_kap)
+                    "kapasitas_per_kelompok": int(new_kap),
+                    "dikunci": False
                 }).execute()
                 
-                # 2. Generate baris kelompok secara otomatis ke database kelompok
-                for num in range(1, int(new_j_kel) + 1):
-                    supabase.table("data_kelompok").insert({
+                # 2. Batch Insert kelompok secara efisien
+                data_kelompok_batch = [
+                    {
                         "nama_kelas": new_nama_kelas,
                         "nama_kelompok": f"Kelompok {num}",
                         "kapasitas": int(new_kap)
-                    }).execute()
-                    
-                st.success(f"Berhasil membuat ruang kelas '{new_nama_kelas}'! Silakan pilih nama kelas Anda pada menu dropdown di atas.")
+                    }
+                    for num in range(1, int(new_j_kel) + 1)
+                ]
+                supabase.table("data_kelompok").insert(data_kelompok_batch).execute()
+                
+                st.success(f"Berhasil membuat ruang kelas '{new_nama_kelas}'!")
                 st.rerun()
             except Exception as e:
-                st.error("Nama kelas sudah terdaftar! Gunakan nama yang lebih spesifik (misal tambah nama prodi/tahun).")
+                err_msg = str(e)
+                if "duplicate" in err_msg.lower() or "unique" in err_msg.lower():
+                    st.error("Nama kelas sudah terdaftar! Gunakan nama yang lebih spesifik.")
+                else:
+                    st.error(f"Gagal menyimpan ke database: {err_msg}")
         else:
             st.error("Nama Kelas dan PIN Admin wajib diisi!")
